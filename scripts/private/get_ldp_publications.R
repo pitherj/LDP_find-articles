@@ -9,7 +9,7 @@
 # Outputs: data/raw_data/LDP_author_publications.csv
 #
 # Author: Jason Pither, with help from Claude (Sonnet 4.6)
-# Updated: 2026-02-19
+# Updated: 2026-03-29
 
 # Load the requried packages
 library(openalexR)
@@ -22,8 +22,10 @@ library(purrr)
 
 options(openalexR.mailto = "jason.pither@ubc.ca")
 
-# Publication date filter (only works from this date onwards)
-min_pub_date <- "2020-01-01"
+# Per-student publication date filters are derived from ldp_year in the author
+# names file: min_pub_date = paste0(ldp_year + 1, "-01-01"). A student who
+# completed the LDP course in fall 2020 could only apply the training to work
+# begun after the course, so qualifying publications start on 2021-01-01.
 
 # Rate limit delay (seconds between API calls)
 # OpenAlex limit is 10 requests/second; 0.15s = ~6.7 req/s (safe margin)
@@ -77,7 +79,7 @@ target_disciplines <- c(
 # Function: Search for author and retrieve their works
 # -----------------------------------------------------------------------------
 
-get_author_works <- function(author_name, from_date = "2020-01-01", delay = api_delay,
+get_author_works <- function(author_name, from_date, delay = api_delay,
                              max_num_pubs = 30) {
   
   cat("\n", strrep("-", 60), "\n", sep = "")
@@ -353,16 +355,21 @@ author_names <- dplyr::left_join(author_names, institution_names, join_by(Instit
 # Create vector of author names (Firstname Lastname format)
 firstname_lastname <- as.vector(author_names$firstname_lastname)
 
+# Compute per-student minimum publication dates: year after LDP enrollment
+min_pub_dates <- paste0(author_names$ldp_year + 1, "-01-01")
+
 # Start search
 
 cat("\n=== OpenAlex Publication Search ===\n")
 cat("Searching for", length(firstname_lastname), "author(s)\n")
-cat("Publication date filter: >=", min_pub_date, "\n")
+cat("Publication date filters: per-student (LDP enrollment year + 1); range",
+    min(author_names$ldp_year + 1), "to", max(author_names$ldp_year + 1), "\n")
 
-# Fetch works for all authors
-results_list <- map(
+# Fetch works for all authors, using each student's individual minimum date
+results_list <- map2(
   firstname_lastname,
-  ~ get_author_works(.x, from_date = min_pub_date, delay = api_delay,
+  min_pub_dates,
+  ~ get_author_works(.x, from_date = .y, delay = api_delay,
                      max_num_pubs = max_num_pubs)
 )
 
@@ -412,8 +419,8 @@ if (length(results_list_compact) > 0) {
 
 # join institution information
 
-combined_results <- dplyr::left_join(combined_results, author_names %>% 
-  select(Institution_ID, program, firstname_lastname, institution_name), 
+combined_results <- dplyr::left_join(combined_results, author_names %>%
+  select(Institution_ID, program, firstname_lastname, institution_name, ldp_year),
   join_by(searched_name == firstname_lastname))
 
 # -----------------------------------------------------------------------------

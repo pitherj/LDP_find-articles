@@ -1,6 +1,6 @@
-# 04_get_comparator_authors.R
+# 02_get_comparator_authors.R
 #
-# Purpose: Identify EEE thesis authors (2020-2022) as comparator candidates and
+# Purpose: Identify EEE thesis authors (2022-2024) as comparator candidates and
 # retrieve their first-author publications from OpenAlex using a two-phase approach:
 #
 #   Phase 1 (per institution): one batch works query filtered by institution,
@@ -17,10 +17,19 @@
 #   survives the keyword filter, ensuring no comparator slots are wasted on authors
 #   whose entire output is off-topic.
 #
+# Oversampling for year-matched pairing:
+#   Comparator authors are collected at oversample_factor * N_target per institution
+#   (default: 2x). This ensures the comparator pool contains publications from all
+#   years represented by LDP students at each institution. Year-matched pairing —
+#   requiring each LDP publication and its matched comparator publication to be from
+#   the same calendar year — is performed at the analysis stage using the
+#   publication_year column in the output. LDP students for whom no year-matched
+#   comparator publication is available will be excluded.
+#
 # API efficiency:
 #   Setup  : ~n_institutions calls (institution ID lookup)
 #   Phase 1: ~n_institutions paginated calls (one works query per institution)
-#   Phase 2: n_confirmed_matches calls (one per matched candidate)
+#   Phase 2: n_confirmed_matches calls (one per matched candidate; up to N_target * oversample_factor per institution)
 #
 # Inputs:  data/processed_data/classified/*.csv    (classified thesis CSVs from LDP_thesis_classification project)
 #          data/raw_data/ldp_exclusion_names.csv   (output of 01_get_ldp_targets.R)
@@ -35,7 +44,7 @@
 #   classified thesis CSVs from the LDP_thesis_classification project.
 #
 # Author: Jason Pither, with help from Claude (Sonnet 4.6)
-# Updated: 2026-03-22
+# Updated: 2026-03-29
 
 library(openalexR)
 library(dplyr)
@@ -52,12 +61,22 @@ library(tidyr)  # used in Phase 1 author topic unnesting
 options(openalexR.mailto = "jason.pither@ubc.ca")
 mailto <- "jason.pither@ubc.ca"
 
-min_pub_date         <- "2020-01-01"
+# Comparator minimum publication date: January 1 of the year following the
+# earliest LDP cohort year (2020 cohort → 2021 cutoff). All comparators share
+# this single cutoff because the within-institution random pairing (done at
+# analysis stage) does not target specific LDP cohort years.
+min_pub_date         <- "2021-01-01"  # floor = year after earliest LDP cohort (2020 → 2021)
 api_delay            <- 0.15
 max_num_pubs         <- 30          # exclude authors with more works (likely not students)
 thesis_years         <- 2022:2024   # thesis submission years covered by the scraped data
 ldp_batch_size       <- 100         # author IDs per batch for author metadata fetch
 min_prob_EEE         <- 0.75        # minimum classifier probability to include as EEE candidate
+
+# Oversample factor: collect oversample_factor * N_target comparator authors per
+# institution to ensure the comparator pool covers all publication years represented
+# by LDP students at that institution. Year-matched pairing is performed at analysis
+# time; excess comparators beyond N_target are not used in the primary analysis.
+oversample_factor    <- 2
 
 target_disciplines <- c(
   "Ecology",
@@ -529,14 +548,18 @@ for (i in seq_len(nrow(N_by_inst))) {
   }
 
   # ── Phase 2: per-match targeted works fetch ───────────────────────────────
-  cat("  Phase 2: fetching full publication lists for confirmed matches...\n")
+  # Collect oversample_factor * N_target authors to ensure year-matched pairing
+  # at analysis stage. Publication year is preserved in the output.
+  n_collect <- N_target * oversample_factor
+  cat(sprintf("  Phase 2: fetching publications for up to %d authors (N_target=%d × %dx oversample)...\n",
+              n_collect, N_target, oversample_factor))
 
   inst_hits <- list()
   n_found   <- 0
 
   for (j in seq_len(nrow(confirmed_matches))) {
 
-    if (n_found >= N_target) break
+    if (n_found >= n_collect) break
 
     cand   <- confirmed_matches[j, ]
     result <- get_works_by_author_id(
@@ -557,7 +580,7 @@ for (i in seq_len(nrow(N_by_inst))) {
       if (nrow(result) > 0) {
         inst_hits[[cand$firstname_lastname]] <- result
         n_found <- n_found + 1
-        cat(sprintf("  >> Hit %d / %d for %s\n", n_found, N_target, inst_name))
+        cat(sprintf("  >> Hit %d / %d for %s\n", n_found, n_collect, inst_name))
       } else {
         cat(sprintf("  >> %s: all publications filtered by keyword; not counted.\n",
                     cand$firstname_lastname))
@@ -568,8 +591,8 @@ for (i in seq_len(nrow(N_by_inst))) {
   inst_result <- if (length(inst_hits) > 0) dplyr::bind_rows(inst_hits) else tibble()
 
   cat(sprintf(
-    "\n  %s complete: %d / %d authors with publications (%d confirmed matches searched)\n",
-    inst_name, n_found, N_target, min(nrow(confirmed_matches), n_found + (N_target - n_found))
+    "\n  %s complete: %d / %d authors collected (N_target=%d; oversample pool for year-matching)\n",
+    inst_name, n_found, n_collect, N_target
   ))
 
   all_comparator_results[[inst_name]] <- inst_result
