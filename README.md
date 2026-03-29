@@ -128,7 +128,7 @@ LDP_find-articles/
     │   ├── ldp_n_target.csv               # Target comparator N per institution
     │   └── ldp_eee_field_ids.rds          # OpenAlex field IDs for EEE scope filter
     └── processed_data/
-        ├── classified/                  # Input: classified thesis CSVs (from LDP_thesis_classification)
+        ├── classified/                  # Input: *_classified.csv files from LDP_thesis_classification (03_apply_classifier.R output)
         ├── comparator_author_publications.csv   # First-author pubs for comparator students
         └── comparator_checkpoint.rds    # Progress checkpoint for resumable comparator search
 ```

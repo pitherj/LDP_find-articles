@@ -329,6 +329,20 @@ EEE_theses <- purrr::map(classified_files, function(f) {
   )
 }) %>% purrr::compact()
 
+# Guard: if no files loaded successfully, stop with an informative message rather
+# than a cryptic size-mismatch error. The classified CSVs must be the post-classifier
+# outputs of 03_apply_classifier.R from LDP_thesis_classification (containing
+# Category and prob_EEE columns), not the pre-classification clean CSVs.
+if (length(EEE_theses) == 0) {
+  stop(
+    "No classified thesis files loaded from data/processed_data/classified/.\n",
+    "  Ensure this directory contains the classified CSV outputs of\n",
+    "  03_apply_classifier.R from the LDP_thesis_classification project\n",
+    "  (files must include Category and prob_EEE columns).\n",
+    "  Found ", length(classified_files), " CSV file(s) but none had the required columns."
+  )
+}
+
 all_EEE_candidates <- dplyr::bind_rows(EEE_theses) %>%
   dplyr::filter(!is.na(firstname_lastname), nchar(trimws(firstname_lastname)) > 0) %>%
   dplyr::distinct(institution_fullname, firstname_lastname, .keep_all = TRUE) %>%
@@ -512,12 +526,17 @@ for (i in seq_len(nrow(N_by_inst))) {
   # ── Name-match with topic-score tie-breaker ───────────────────────────────
   # Where multiple au_ids map to the same candidate name_key, retain the one
   # with the highest count of target_disciplines matches in their topics.
+  # The many-to-many relationship here is expected: multiple OpenAlex author
+  # profiles can share the same name_key (same first initial + last name), and
+  # multiple thesis candidates can share a name_key for the same reason.
+  # slice_max below collapses each firstname_lastname to one best-match au_id.
   # NOTE: author topics from oa2df have columns field_display_name and
   # subfield_display_name; verify these names if this step errors.
   confirmed_matches <- inst_candidates %>%
     dplyr::inner_join(
       first_authors_filtered %>% dplyr::select(au_id, name_key),
-      by = "name_key"
+      by = "name_key",
+      relationship = "many-to-many"
     ) %>%
     dplyr::left_join(
       author_meta_filtered %>% dplyr::select(id, topics),
