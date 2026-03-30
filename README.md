@@ -4,6 +4,8 @@ Retrieves first-author publications for Living Data Project (LDP) student cohort
 
 **Authors**: Jason Pither, Mathew Vis-Dunbar, Sandra Emry, David Hunt, Diane Srivastava
 
+**AI usage**: Claude Code (Sonnet 4.6) contributed to coding and ensuring computational reproducibility, with oversight by Jason Pither.
+
 **Contact**: Jason Pither — jason.pither@ubc.ca | [ORCID](https://orcid.org/0000-0002-7490-6839) | UBC Okanagan
 
 ## Project Timeline
