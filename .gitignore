@@ -2,4 +2,5 @@
 .Rhistory
 .RData
 .Ruserdata
-data/
+data/processed_data/private/
+data/raw_data
