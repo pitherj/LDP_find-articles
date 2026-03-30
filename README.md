@@ -6,6 +6,16 @@ Retrieves first-author publications for Living Data Project (LDP) student cohort
 
 **Contact**: Jason Pither — jason.pither@ubc.ca | [ORCID](https://orcid.org/0000-0002-7490-6839) | UBC Okanagan
 
+## Project Timeline
+
+| Date | Activity |
+|------|----------|
+| 2025-10-10 | Project conceived |
+| 2026-01-06 | Ethics approval (UBC BREB) |
+| 2026-01-13 | [Pre-registration](https://github.com/pitherj/LDP_pre-registration/blob/main/LDP_preregistration_OSF.md) initiated |
+| 2026-01-13 | README created |
+| 2026-03-30 | README last updated |
+
 ---
 
 ## Background
