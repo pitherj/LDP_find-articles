@@ -4,12 +4,12 @@
 #          articles from OpenAlex, applying filters to disambiguate authors
 #          and exclude high-volume (non-student) profiles.
 #
-# Inputs:  data/raw_data/ldp_student_names_2020-2022.csv
+# Inputs:  data/processed_data/private/ldp_student_names_2020-2022.csv
 #          data/raw_data/institution_names.csv
-# Outputs: data/raw_data/LDP_author_publications.csv
+# Outputs: data/processed_data/private/LDP_author_publications.csv
 #
 # Author: Jason Pither, with help from Claude (Sonnet 4.6)
-# Updated: 2026-03-29
+# Updated: 2026-03-30
 
 # Load the requried packages
 library(openalexR)
@@ -79,8 +79,8 @@ target_disciplines <- c(
 # Function: Search for author and retrieve their works
 # -----------------------------------------------------------------------------
 
-get_author_works <- function(author_name, from_date, delay = api_delay,
-                             max_num_pubs = 30) {
+get_author_works <- function(author_name, from_date, institution_name,
+                             delay = api_delay, max_num_pubs = 30) {
   
   cat("\n", strrep("-", 60), "\n", sep = "")
   cat("Searching for author:", author_name, "\n")
@@ -143,10 +143,11 @@ get_author_works <- function(author_name, from_date, delay = api_delay,
     }
   }
   
-  # Step 4: If >1 candidate, fetch all works per candidate and filter by institution
+  # Step 4: If >1 candidate, fetch all works per candidate and filter by the
+  # student's specific LDP institution (not the full list of all institutions).
   if (nrow(author_info) > 1) {
-    inst_names <- institution_names$institution_name
-    
+    inst_names <- institution_name   # single string for this student
+
     has_inst_match <- map_lgl(author_info$id, function(aid) {
       candidate_works <- tryCatch({
         oa_fetch(
@@ -290,9 +291,12 @@ get_author_works <- function(author_name, from_date, delay = api_delay,
   
   Sys.sleep(delay)
   
-  # Step 7: Filter works by focal author's institution match
+  # Step 7: Filter works to those where the focal author's affiliation matches
+  # the student's specific LDP institution. This excludes papers published
+  # while affiliated with a different (non-LDP) institution, and prevents
+  # papers from an earlier institution from being included.
   if (!is.null(works_authorships) && nrow(works_authorships) > 0) {
-    inst_names <- institution_names$institution_name
+    inst_names <- institution_name   # single string for this student
     keep <- map_lgl(works_authorships$authorships, function(a) {
       if (is.null(a) || nrow(a) == 0) return(FALSE)
       focal_rows <- a[map_lgl(a$display_name, function(dn) {
@@ -343,7 +347,7 @@ institution_names <- readr::read_csv(here::here("data", "raw_data", "institution
 
 # read in CSV of author names (includes institutions and program for most)
 
-author_names <- readr::read_csv(here::here("data", "raw_data", "ldp_student_names_2020-2022.csv"))
+author_names <- readr::read_csv(here::here("data", "processed_data", "private", "ldp_student_names_2020-2022.csv"))
 
 # Create new field of author names (Firstname Lastname format; we did not collect full names unfortunately)
 author_names <- author_names %>%
@@ -352,11 +356,10 @@ author_names <- author_names %>%
 # add institution information
 author_names <- dplyr::left_join(author_names, institution_names, join_by(Institution_ID == institution_abbrev))
 
-# Create vector of author names (Firstname Lastname format)
-firstname_lastname <- as.vector(author_names$firstname_lastname)
-
-# Compute per-student minimum publication dates: year after LDP enrollment
-min_pub_dates <- paste0(author_names$ldp_year + 1, "-01-01")
+# Create per-student vectors (all three must be parallel and same length)
+firstname_lastname       <- as.vector(author_names$firstname_lastname)
+min_pub_dates            <- paste0(author_names$ldp_year + 1, "-01-01")
+student_institution_names <- as.vector(author_names$institution_name)
 
 # Start search
 
@@ -364,13 +367,19 @@ cat("\n=== OpenAlex Publication Search ===\n")
 cat("Searching for", length(firstname_lastname), "author(s)\n")
 cat("Publication date filters: per-student (LDP enrollment year + 1); range",
     min(author_names$ldp_year + 1), "to", max(author_names$ldp_year + 1), "\n")
+cat("Institution filter: per-student (student's specific LDP institution)\n")
 
 # Fetch works for all authors, using each student's individual minimum date
-results_list <- map2(
-  firstname_lastname,
-  min_pub_dates,
-  ~ get_author_works(.x, from_date = .y, delay = api_delay,
-                     max_num_pubs = max_num_pubs)
+# and specific institution. pmap() iterates over all three parallel vectors.
+results_list <- pmap(
+  list(
+    author_name      = firstname_lastname,
+    from_date        = min_pub_dates,
+    institution_name = student_institution_names
+  ),
+  get_author_works,
+  delay        = api_delay,
+  max_num_pubs = max_num_pubs
 )
 
 names(results_list) <- firstname_lastname
@@ -427,4 +436,4 @@ combined_results <- dplyr::left_join(combined_results, author_names %>%
 # Export to CSV
 # -----------------------------------------------------------------------------
 
-readr::write_csv(combined_results, here::here("data", "raw_data", "LDP_author_publications.csv"))
+readr::write_csv(combined_results, here::here("data", "processed_data", "private", "LDP_author_publications.csv"))

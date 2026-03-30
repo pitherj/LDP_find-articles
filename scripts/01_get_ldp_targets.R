@@ -17,23 +17,24 @@
 #      02_get_comparator_authors.R to restrict the institution-level works query to
 #      EEE-relevant fields.
 #
-# Inputs:  data/raw_data/ldp_student_names_2020-2022.csv
-#          data/raw_data/LDP_author_publications.csv
+# Inputs:  data/processed_data/private/ldp_student_names_2020-2022.csv
+#          data/processed_data/private/LDP_author_publications.csv
 #          data/raw_data/institution_names.csv
-# Outputs: data/raw_data/ldp_exclusion_names.csv
+# Outputs: data/processed_data/private/ldp_exclusion_names.csv
 #          data/raw_data/ldp_n_target.csv
 #          data/raw_data/ldp_eee_field_ids.rds
 #
 # Author: Jason Pither, with help from Claude (Sonnet 4.6)
-# Updated: 2026-03-22
+# Updated: 2026-03-29
 
-library(openalexR)
 library(dplyr)
 library(readr)
 library(here)
 library(stringr)
 library(purrr)
 library(tidyr)
+library(httr)
+library(jsonlite)
 
 # -----------------------------------------------------------------------------
 # Configuration (must match 02_get_comparator_authors.R)
@@ -42,9 +43,8 @@ library(tidyr)
 options(openalexR.mailto = "jason.pither@ubc.ca")
 mailto <- "jason.pither@ubc.ca"
 
-api_delay            <- 0.15
+api_delay            <- 0.5    # conservative; avoids 429s from the polite pool
 field_freq_threshold <- 0.10   # include fields present in ≥10% of LDP works
-ldp_batch_size       <- 100    # work IDs per batch for topic fetch
 
 # -----------------------------------------------------------------------------
 # Non-EEE keyword patterns (verbatim from thesis_classification_model_training.qmd)
@@ -136,11 +136,11 @@ institution_names <- readr::read_csv(
 )
 
 ldp_student_names <- readr::read_csv(
-  here::here("data", "raw_data", "ldp_student_names_2020-2022.csv"), show_col_types = FALSE
+  here::here("data", "processed_data", "private", "ldp_student_names_2020-2022.csv"), show_col_types = FALSE
 )
 
 LDP_pubs_raw <- readr::read_csv(
-  here::here("data", "raw_data", "LDP_author_publications.csv"), show_col_types = FALSE
+  here::here("data", "processed_data", "private", "LDP_author_publications.csv"), show_col_types = FALSE
 )
 
 # -----------------------------------------------------------------------------
@@ -162,9 +162,9 @@ cat(sprintf("LDP exclusion list: %d unique student names\n", nrow(ldp_exclusion_
 
 readr::write_csv(
   ldp_exclusion_names,
-  here::here("data", "raw_data", "ldp_exclusion_names.csv")
+  here::here("data", "processed_data", "private", "ldp_exclusion_names.csv")
 )
-cat("Saved: data/raw_data/ldp_exclusion_names.csv\n")
+cat("Saved: data/processed_data/private/ldp_exclusion_names.csv\n")
 
 # -----------------------------------------------------------------------------
 # Artifact 2: ldp_n_target.csv
@@ -207,48 +207,97 @@ cat("\n--- Fetching topics for LDP publications ---\n")
 ldp_ids       <- unique(na.omit(LDP_pubs$id))
 ldp_ids_short <- unique(na.omit(stringr::str_extract(ldp_ids, "W\\d+")))
 
-cat(sprintf("Fetching topics for %d LDP works in batches of %d\n",
-            length(ldp_ids_short), ldp_batch_size))
+cat(sprintf("Fetching topics for %d LDP works (one request per work)\n",
+            length(ldp_ids_short)))
 
-n_batches      <- ceiling(length(ldp_ids_short) / ldp_batch_size)
-ldp_topic_list <- vector("list", n_batches)
+ldp_topic_list <- vector("list", length(ldp_ids_short))
 
-for (b in seq_len(n_batches)) {
-  idx    <- ((b - 1) * ldp_batch_size + 1) : min(b * ldp_batch_size, length(ldp_ids_short))
-  id_str <- paste(ldp_ids_short[idx], collapse = "|")
+# Zero-row typed prototype ensures map_dfr always returns the expected schema
+# even when a work has no topic data (avoids 0-column tibble).
+topic_proto <- tibble::tibble(
+  work_id            = character(),
+  field_id           = character(),
+  field_display_name = character()
+)
 
-  query_url <- paste0(
-    "https://api.openalex.org/works",
-    "?filter=ids.openalex:", id_str,
-    "&select=id,topics",
-    "&per-page=200",
+# Fetch each work individually via /works/{id}?select=id,topics.
+# The multi-ID filter query (ids.openalex:W1|W2|...) triggers HTTP 429 from
+# OpenAlex even at short URL lengths; direct per-work lookups are reliable.
+for (i in seq_along(ldp_ids_short)) {
+  wid <- ldp_ids_short[i]
+  url <- paste0(
+    "https://api.openalex.org/works/", wid,
+    "?select=id,topics",
     "&mailto=", mailto
   )
 
-  raw <- tryCatch(
-    oa_request(query_url = query_url),
-    error = function(e) { cat("  Batch", b, "error:", conditionMessage(e), "\n"); list() }
-  )
+  # Retry up to 3 times on HTTP 429, doubling the wait each time.
+  max_retries <- 3
+  retry_wait  <- 10
+  resp        <- NULL
 
-  if (length(raw) > 0)
-    ldp_topic_list[[b]] <- oa2df(raw, entity = "works")
+  for (attempt in seq_len(max_retries)) {
+    resp <- tryCatch(
+      httr::GET(url),
+      error = function(e) { cat("  Work", wid, "HTTP error:", conditionMessage(e), "\n"); NULL }
+    )
+    if (is.null(resp)) break
+    if (httr::status_code(resp) != 429) break
+    wait_sec <- retry_wait * 2^(attempt - 1)
+    cat(sprintf("  Work %s: HTTP 429 — waiting %ds before retry %d/%d\n",
+                wid, wait_sec, attempt, max_retries))
+    Sys.sleep(wait_sec)
+  }
+
+  if (!is.null(resp) && httr::status_code(resp) == 200) {
+    w <- jsonlite::fromJSON(
+      httr::content(resp, as = "text", encoding = "UTF-8"),
+      simplifyVector = FALSE
+    )
+    topics <- w$topics
+    if (!is.null(topics) && length(topics) > 0) {
+      ldp_topic_list[[i]] <- purrr::map_dfr(topics, function(t) {
+        field <- t$field
+        if (is.null(field)) return(topic_proto)
+        tibble::tibble(
+          work_id            = wid,
+          field_id           = field[["id"]],
+          field_display_name = field[["display_name"]]
+        )
+      })
+    }
+  } else {
+    cat(sprintf("  Work %s: HTTP %s after %d attempt(s) — skipping\n",
+                wid, if (is.null(resp)) "error" else httr::status_code(resp), attempt))
+  }
+
+  if (i %% 10 == 0)
+    cat(sprintf("  ... %d / %d works done\n", i, length(ldp_ids_short)))
+
   Sys.sleep(api_delay)
 }
 
 ldp_topics_df <- dplyr::bind_rows(purrr::compact(ldp_topic_list))
 
-# Extract field-level frequency from LDP topics.
-# NOTE: if this unnest fails, inspect ldp_topics_df$topics[[1]] to confirm
-# column names — they vary slightly across openalexR versions.
-# topics tibble columns: i, score, id, display_name, type
-# type values: "topic", "subfield", "field", "domain"
-field_counts <- ldp_topics_df %>%
-  dplyr::select(topics) %>%
-  tidyr::unnest(topics) %>%
-  dplyr::filter(type == "field") %>%
-  dplyr::count(id, display_name, sort = TRUE) %>%
-  dplyr::rename(field_id = id, field_display_name = display_name) %>%
-  dplyr::mutate(pct = n / nrow(ldp_topics_df))
+if (nrow(ldp_topics_df) == 0) {
+  cat("\nWARNING: No field data retrieved from topics.\n")
+  cat("         Check batch output above for HTTP errors.\n")
+  cat("         eee_field_ids will be empty; review API structure and re-run.\n")
+  field_counts  <- tibble::tibble(
+    field_id           = character(),
+    field_display_name = character(),
+    n                  = integer(),
+    pct                = numeric()
+  )
+} else {
+  # Count distinct works per field. Using distinct(work_id, field_id) first
+  # ensures a work that contributes multiple topics from the same field is
+  # counted only once toward that field's frequency.
+  field_counts <- ldp_topics_df %>%
+    dplyr::distinct(work_id, field_id, field_display_name) %>%
+    dplyr::count(field_id, field_display_name, sort = TRUE) %>%
+    dplyr::mutate(pct = n / length(ldp_ids_short))
+}
 
 cat("\nField distribution in LDP publications:\n")
 print(field_counts)

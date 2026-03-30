@@ -8,13 +8,13 @@
 #          (year of enrollment + 1).
 #          Exports the result for use in downstream publication retrieval.
 #
-# Note:    This script processes private data and is stored in data/raw_data/scripts/
+# Note:    This script processes private data and is stored in scripts/private/
 #          rather than the main scripts/ folder. Access restricted to
 #          Jason Pither and Diane Srivastava.
 #
 # Inputs:  data/raw_data/LDP-MODULES_ALL_2020-2022.csv
 #          data/raw_data/Training_event_data.csv
-# Outputs: data/raw_data/ldp_student_names_2020-2022.csv
+# Outputs: data/processed_data/private/ldp_student_names_2020-2022.csv
 #
 # Author:  Jason Pither
 # Updated: 2026-03-29
@@ -47,7 +47,8 @@ ldp_student_names <- roster %>%
 
 # write file
 
-# NOTE: the data will be written to the protected and hidden "raw_data" directory
-# so as to keep it accessible to only those with permissions
+# NOTE: the data will be written to the protected and hidden
+# "processed_data/private" directory so as to keep it accessible to only
+# those with permissions.
 
-readr::write_csv(ldp_student_names, here::here("data", "raw_data", "ldp_student_names_2020-2022.csv"))
+readr::write_csv(ldp_student_names, here::here("data", "processed_data", "private", "ldp_student_names_2020-2022.csv"))

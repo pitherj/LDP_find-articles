@@ -32,7 +32,7 @@
 #   Phase 2: n_confirmed_matches calls (one per matched candidate; up to N_target * oversample_factor per institution)
 #
 # Inputs:  data/processed_data/classified/*.csv    (classified thesis CSVs from LDP_thesis_classification project)
-#          data/raw_data/ldp_exclusion_names.csv   (output of 01_get_ldp_targets.R)
+#          data/processed_data/private/ldp_exclusion_names.csv   (output of 01_get_ldp_targets.R)
 #          data/raw_data/ldp_n_target.csv          (output of 01_get_ldp_targets.R)
 #          data/raw_data/ldp_eee_field_ids.rds     (output of 01_get_ldp_targets.R)
 #          data/raw_data/institution_names.csv
@@ -52,7 +52,9 @@ library(readr)
 library(here)
 library(stringr)
 library(purrr)
-library(tidyr)  # used in Phase 1 author topic unnesting
+library(tidyr)   # used in Phase 1 author topic unnesting
+library(httr)
+library(jsonlite)
 
 # -----------------------------------------------------------------------------
 # Configuration
@@ -66,7 +68,7 @@ mailto <- "jason.pither@ubc.ca"
 # this single cutoff because the within-institution random pairing (done at
 # analysis stage) does not target specific LDP cohort years.
 min_pub_date         <- "2021-01-01"  # floor = year after earliest LDP cohort (2020 → 2021)
-api_delay            <- 0.15
+api_delay            <- 1.0    # conservative; avoids 429s when running after script 01
 max_num_pubs         <- 30          # exclude authors with more works (likely not students)
 thesis_years         <- 2022:2024   # thesis submission years covered by the scraped data
 ldp_batch_size       <- 100         # author IDs per batch for author metadata fetch
@@ -181,6 +183,75 @@ name_key <- function(name) {
 name_keys <- function(names) purrr::map_chr(names, name_key)
 
 # -----------------------------------------------------------------------------
+# Helpers: retry wrappers for oa_fetch / oa_request on HTTP 429
+# Both functions detect "429" in the error message and back off exponentially
+# (10 s, 20 s, 40 s) before retrying up to max_retries times.
+# -----------------------------------------------------------------------------
+
+# oa_fetch on HTTP 429 does NOT throw an R error — it prints the status message
+# and returns NULL. tryCatch(error=) therefore never fires. The fix is to use
+# withCallingHandlers to intercept the printed message and set a flag, then
+# back off and retry. The same pattern applies to oa_request.
+
+oa_fetch_retry <- function(..., max_retries = 3, initial_wait = 10) {
+  for (attempt in seq_len(max_retries)) {
+    got_429 <- FALSE
+    result  <- withCallingHandlers(
+      tryCatch(oa_fetch(...), error = function(e) e),
+      message = function(m) {
+        if (grepl("429", conditionMessage(m))) {
+          got_429 <<- TRUE
+          invokeRestart("muffleMessage")
+        }
+      },
+      warning = function(w) {
+        if (grepl("429", conditionMessage(w))) {
+          got_429 <<- TRUE
+          invokeRestart("muffleWarning")
+        }
+      }
+    )
+    if (!got_429 && !inherits(result, "error")) return(result)
+    if (inherits(result, "error") && !grepl("429", conditionMessage(result))) stop(result)
+    wait_sec <- initial_wait * 2^(attempt - 1)
+    cat(sprintf("  HTTP 429 — waiting %ds (attempt %d/%d)\n",
+                wait_sec, attempt, max_retries))
+    Sys.sleep(wait_sec)
+  }
+  warning("oa_fetch_retry: exhausted retries, returning NULL")
+  NULL
+}
+
+oa_request_retry <- function(query_url, ..., max_retries = 3, initial_wait = 10) {
+  for (attempt in seq_len(max_retries)) {
+    got_429 <- FALSE
+    result  <- withCallingHandlers(
+      tryCatch(oa_request(query_url = query_url, ...), error = function(e) e),
+      message = function(m) {
+        if (grepl("429", conditionMessage(m))) {
+          got_429 <<- TRUE
+          invokeRestart("muffleMessage")
+        }
+      },
+      warning = function(w) {
+        if (grepl("429", conditionMessage(w))) {
+          got_429 <<- TRUE
+          invokeRestart("muffleWarning")
+        }
+      }
+    )
+    if (!got_429 && !inherits(result, "error")) return(result)
+    if (inherits(result, "error") && !grepl("429", conditionMessage(result))) stop(result)
+    wait_sec <- initial_wait * 2^(attempt - 1)
+    cat(sprintf("  HTTP 429 — waiting %ds (attempt %d/%d)\n",
+                wait_sec, attempt, max_retries))
+    Sys.sleep(wait_sec)
+  }
+  warning("oa_request_retry: exhausted retries, returning empty list")
+  list()
+}
+
+# -----------------------------------------------------------------------------
 # Helper: fetch first-author articles for a confirmed OpenAlex author ID
 # (Phase 2 — no disambiguation needed; author ID already confirmed in Phase 1)
 # -----------------------------------------------------------------------------
@@ -190,10 +261,9 @@ get_works_by_author_id <- function(author_id, author_name,
                                    delay     = api_delay) {
   cat("  Fetching works for:", author_name, "(", author_id, ")\n")
 
-  works_raw <- tryCatch(
-    oa_fetch(entity = "works", author.id = author_id,
-             from_publication_date = from_date, output = "list", verbose = FALSE),
-    error = function(e) { cat("  Error:", conditionMessage(e), "\n"); NULL }
+  works_raw <- oa_fetch_retry(
+    entity = "works", author.id = author_id,
+    from_publication_date = from_date, output = "list", verbose = FALSE
   )
   Sys.sleep(delay)
 
@@ -239,9 +309,9 @@ institution_names <- readr::read_csv(
   here::here("data", "raw_data", "institution_names.csv"), show_col_types = FALSE
 )
 
-# LDP target artifacts — produced by data/raw_data/scripts/get_ldp_targets.R
+# LDP target artifacts — produced by scripts/01_get_ldp_targets.R
 ldp_exclusion <- readr::read_csv(
-  here::here("data", "raw_data", "ldp_exclusion_names.csv"), show_col_types = FALSE
+  here::here("data", "processed_data", "private", "ldp_exclusion_names.csv"), show_col_types = FALSE
 )
 LDP_names <- ldp_exclusion$firstname_lastname
 
@@ -275,37 +345,17 @@ cat(sprintf("Field filter string for API: %s\n", eee_field_filter))
 
 cat("\n--- Resolving institution OpenAlex IDs ---\n")
 
-inst_id_map <- purrr::map_dfr(institution_names$institution_name, function(inst_name) {
-  tryCatch({
-    res <- oa_fetch(
-      entity  = "institutions",
-      search  = inst_name,
-      options = list(select = c("id", "display_name")),
-      verbose = FALSE
-    )
-    Sys.sleep(api_delay)
-    if (is.null(res) || nrow(res) == 0) {
-      cat(sprintf("  WARNING: No OpenAlex ID found for: %s\n", inst_name))
-      return(tibble(institution_name = inst_name, openalex_id = NA_character_))
-    }
-    cat(sprintf("  %s → %s (%s)\n", inst_name, res$id[1], res$display_name[1]))
-    tibble(institution_name = inst_name, openalex_id = res$id[1])
-  }, error = function(e) {
-    cat(sprintf("  ERROR for %s: %s\n", inst_name, conditionMessage(e)))
-    tibble(institution_name = inst_name, openalex_id = NA_character_)
-  })
-})
-
-# **NOTE** add U Montreal and U Quebec a Montreal codes manually:
-
-inst_id_map[inst_id_map$institution_name == "Universite de Montreal", "openalex_id"] <- "https://openalex.org/I70931966"
-inst_id_map[inst_id_map$institution_name == "Universite du Quebec a Montreal", "openalex_id"] <- "https://openalex.org/I159129438"
-
-# Deduplicate: if institution_names.csv maps multiple abbreviations to the same
-# full name (e.g. UBC and UBCO both → "University of British Columbia"), keep
-# only the first row to avoid length > 1 in the openalex_id lookup below
-inst_id_map <- inst_id_map %>%
+# Institution IDs are stored directly in institution_names.csv (openalex_id
+# column). No API call needed — eliminates rate-limit risk for this step.
+# Deduplicate so each institution_name maps to exactly one openalex_id
+# (institution_names.csv has multiple abbreviation rows per institution, e.g.
+# UBC and UBCO both → "University of British Columbia").
+inst_id_map <- institution_names %>%
+  dplyr::select(institution_name, openalex_id) %>%
   dplyr::distinct(institution_name, .keep_all = TRUE)
+
+cat("Institution OpenAlex IDs loaded from institution_names.csv:\n")
+print(inst_id_map)
 
 
 # -----------------------------------------------------------------------------
@@ -425,10 +475,7 @@ for (i in seq_len(nrow(N_by_inst))) {
   )
   cat(sprintf("  Phase 1 URL (%d chars): %s\n", nchar(phase1_url), phase1_url))
 
-  phase1_raw <- tryCatch(
-    oa_request(query_url = phase1_url),
-    error = function(e) { cat("  Phase 1 error:", conditionMessage(e), "\n"); list() }
-  )
+  phase1_raw <- oa_request_retry(query_url = phase1_url)
   Sys.sleep(api_delay)
 
   if (length(phase1_raw) == 0) {
@@ -500,10 +547,7 @@ for (i in seq_len(nrow(N_by_inst))) {
       "&mailto=", mailto
     )
 
-    raw <- tryCatch(
-      oa_request(query_url = auth_url),
-      error = function(e) { cat("  Author batch", b, "error:", conditionMessage(e), "\n"); list() }
-    )
+    raw <- oa_request_retry(query_url = auth_url)
     if (length(raw) > 0)
       author_list[[b]] <- oa2df(raw, entity = "authors")
     Sys.sleep(api_delay)
