@@ -3,4 +3,6 @@
 .RData
 .Ruserdata
 data/processed_data/private/
-data/raw_data
+data/raw_data/LDP-MODULES_ALL_2020-2022.csv
+data/raw_data/Training_event_data.csv
+data/processed_data/comparator_checkpoint.rds

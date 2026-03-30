@@ -2,10 +2,10 @@
 
 - **Directory**: `data/`
 - **Dictionary type**: Mixed (input data, derived lookup files, pipeline outputs)
-- **Last updated**: 2026-03-30
+- **Last updated**: 2026-03-29
 - **Maintained by**: Jason Pither (jason.pither@ubc.ca)
 
-This directory contains all inputs and outputs for the LDP Find Articles pipeline. Derived files that contain personally identifiable information (LDP student names) are stored in `processed_data/private/` and are git-ignored. Non-sensitive lookup files (`institution_names.csv`, `ldp_n_target.csv`, `ldp_eee_field_ids.rds`) remain in `raw_data/`. All data — both raw and processed — are excluded from version control.
+This directory contains all inputs and outputs for the LDP Find Articles pipeline. Derived files that contain personally identifiable information (LDP student names) are stored in `processed_data/private/` and are git-ignored. The two private LDP roster files in `raw_data/` are also git-ignored. All other files — including non-sensitive lookup files and non-PII processed outputs — are tracked in version control.
 
 ---
 
@@ -15,13 +15,13 @@ This directory contains all inputs and outputs for the LDP Find Articles pipelin
 data/
 ├── DATA-DICTIONARY.md
 ├── raw_data/                                     # Private source data + non-sensitive lookup files
-│   ├── LDP-MODULES_ALL_2020-2022.csv             # [PRIVATE] Full LDP course roster
-│   ├── Training_event_data.csv                   # [PRIVATE] Course ID → year/title lookup
-│   ├── institution_names.csv                     # Institution abbreviation → full name + OpenAlex ID
-│   ├── ldp_n_target.csv                          # Derived: target comparator N per institution
-│   └── ldp_eee_field_ids.rds                     # Derived: OpenAlex field IDs for EEE scope filter
+│   ├── LDP-MODULES_ALL_2020-2022.csv             # [PRIVATE, git-ignored] Full LDP course roster
+│   ├── Training_event_data.csv                   # [PRIVATE, git-ignored] Course ID → year/title lookup
+│   ├── institution_names.csv                     # [tracked] Institution abbreviation → full name + OpenAlex ID
+│   ├── ldp_n_target.csv                          # [tracked] Derived: target comparator N per institution
+│   └── ldp_eee_field_ids.rds                     # [tracked] Derived: OpenAlex field IDs for EEE scope filter
 └── processed_data/
-    ├── classified/                               # Input: classified thesis CSVs (from LDP_thesis_classification, 03_apply_classifier.R output)
+    ├── classified/                               # [tracked] Input: classified thesis CSVs (from LDP_thesis_classification, 03_apply_classifier.R output)
     │   ├── Alberta_classified.csv
     │   ├── Guelph_classified.csv
     │   ├── Manitoba_classified.csv
@@ -30,17 +30,17 @@ data/
     │   ├── Toronto_classified.csv
     │   ├── UBC_classified.csv
     │   └── WLU_classified.csv
-    ├── private/                                  # [PRIVATE] Derived files containing LDP student names
+    ├── private/                                  # [PRIVATE, git-ignored] Derived files containing LDP student names
     │   ├── ldp_student_names_2020-2022.csv       # Derived: unique LDP students + ldp_year
     │   ├── LDP_author_publications.csv           # Derived: first-author pubs for LDP students
     │   ├── ldp_exclusion_names.csv               # Derived: all enrolled LDP names (exclusion list)
     │   ├── LDP_publications_filtered.csv         # Output of 03: LDP pubs after deduplication + primary-research filter
     │   ├── filter_log.txt                        # Output of 03: step-by-step exclusion report
     │   └── rater_key.csv                         # Output of 04: links blinded pub codes to group/author/pair
-    ├── comparator_author_publications.csv        # Output of 02: first-author pubs for comparator students (raw)
-    ├── comparator_checkpoint.rds                 # Checkpoint: resumable progress for comparator search
-    ├── comparator_publications_filtered.csv      # Output of 03: comparator pubs after deduplication + primary-research filter
-    └── rater_publications.csv                    # Output of 04: blinded publication list for FAIR compliance raters
+    ├── comparator_author_publications.csv        # [tracked] Output of 02: first-author pubs for comparator students (raw)
+    ├── comparator_checkpoint.rds                 # [git-ignored] Checkpoint: resumable progress for comparator search
+    ├── comparator_publications_filtered.csv      # [tracked] Output of 03: comparator pubs after deduplication + primary-research filter
+    └── rater_publications.csv                    # [tracked] Output of 04: blinded publication list for FAIR compliance raters
 ```
 
 ---
@@ -242,7 +242,7 @@ Load with: `readRDS(here::here("data", "raw_data", "ldp_eee_field_ids.rds"))`
 - **Path**: `processed_data/classified/`
 - **Type**: Input — handoff from companion project
 - **Source**: [`LDP_thesis_classification`](https://github.com/pitherj/LDP_thesis_classification) — output of `03_apply_classifier.R`
-- **Git-ignored**: Yes (data not version-controlled in this repo)
+- **Git-ignored**: No — thesis authorship is public record; no PII concern
 
 One CSV per LDP-affiliated institution containing EEE-classified thesis records for graduate students with thesis deposit years 2022–2024. These are the candidate comparator authors. Files must be the **post-classifier outputs** of `03_apply_classifier.R` (containing `Category` and `prob_EEE` columns) and placed here manually before running `02_get_comparator_authors.R`.
 
@@ -272,7 +272,7 @@ One CSV per LDP-affiliated institution containing EEE-classified thesis records 
 - **Path**: `processed_data/comparator_author_publications.csv`
 - **Type**: Output
 - **Generated by**: `scripts/02_get_comparator_authors.R`
-- **Git-ignored**: Yes (data not version-controlled)
+- **Git-ignored**: No — contains only publicly available publication metadata for published authors
 
 First-author peer-reviewed articles retrieved from OpenAlex for matched comparator student-authors (non-LDP EEE graduate students). Each row is one publication for one comparator student-author. Comparator authors are collected at 2 × N_target per institution (oversampled) to ensure year-coverage across all publication years represented by LDP students at each institution. Year-matched pairing (LDP publication year = comparator publication year) is performed at analysis time using the `publication_year` column.
 
@@ -321,7 +321,7 @@ All columns from `processed_data/private/LDP_author_publications.csv` are presen
 - **Path**: `processed_data/comparator_publications_filtered.csv`
 - **Type**: Output
 - **Generated by**: `scripts/03_clean_filter_publications.R`
-- **Git-ignored**: Yes (data not version-controlled)
+- **Git-ignored**: No — contains only publicly available publication metadata for published authors
 
 Comparator author publications after the same four filtering layers applied to the LDP publications. All columns from `processed_data/comparator_author_publications.csv` are retained, plus `is_paratext` and `type_crossref`.
 
@@ -361,7 +361,7 @@ Load with: `readRDS(here::here("data", "processed_data", "comparator_checkpoint.
 - **Path**: `processed_data/rater_publications.csv`
 - **Type**: Output
 - **Generated by**: `scripts/04_create_rater_files.R`
-- **Git-ignored**: Yes (data not version-controlled)
+- **Git-ignored**: No — blinded; contains no author names, group assignments, or PII
 
 Blinded publication list for FAIR compliance raters. Each row is one publication (LDP or comparator) identified only by a random alphanumeric code. Group membership, author name, and institution are deliberately omitted. The rows are shuffled so that group identity cannot be inferred from position. This file is shared with raters; `private/rater_key.csv` must not be shared until scoring is complete.
 
@@ -419,9 +419,9 @@ Full linking table connecting each blinded `pub_id` in `rater_publications.csv` 
 | `processed_data/private/ldp_exclusion_names.csv` | Yes | Yes | `scripts/01_get_ldp_targets.R` |
 | `processed_data/private/LDP_publications_filtered.csv` | Yes | Yes | `scripts/03_clean_filter_publications.R` |
 | `processed_data/private/filter_log.txt` | Yes | Yes | `scripts/03_clean_filter_publications.R` |
-| `processed_data/classified/*.csv` | No | Yes | `LDP_thesis_classification` project |
-| `processed_data/comparator_author_publications.csv` | No | Yes | `scripts/02_get_comparator_authors.R` |
+| `processed_data/classified/*.csv` | No | No | `LDP_thesis_classification` project |
+| `processed_data/comparator_author_publications.csv` | No | No | `scripts/02_get_comparator_authors.R` |
 | `processed_data/comparator_checkpoint.rds` | No | Yes | `scripts/02_get_comparator_authors.R` |
-| `processed_data/comparator_publications_filtered.csv` | No | Yes | `scripts/03_clean_filter_publications.R` |
-| `processed_data/rater_publications.csv` | No | Yes | `scripts/04_create_rater_files.R` |
+| `processed_data/comparator_publications_filtered.csv` | No | No | `scripts/03_clean_filter_publications.R` |
+| `processed_data/rater_publications.csv` | No | No | `scripts/04_create_rater_files.R` |
 | `processed_data/private/rater_key.csv` | Yes | Yes | `scripts/04_create_rater_files.R` |
