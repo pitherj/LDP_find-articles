@@ -12,8 +12,7 @@ Retrieves first-author publications for Living Data Project (LDP) student cohort
 
 The Living Data Project (LDP) trained Canadian graduate students in open science practices through four annual 1-credit modules (2020–2022). This project retrieves peer-reviewed, first-author publications for LDP student participants and institution-matched comparator students (identified by the companion [LDP_thesis_classification](https://github.com/pitherj/LDP_thesis_classification) pipeline) in preparation for FAIR compliance scoring.
 
-The publication search applies a per-student minimum date: because LDP courses were offered each fall, a student who completed the course in year *Y* is only expected to have applied the training to work begun afterward. Qualifying publications therefore start on January 1 of year *Y* + 1 (e.g., 2021-01-01 for 2020 cohort students).
-
+The pre-registration for this study is available [here](https://github.com/pitherj/LDP_pre-registration/blob/main/LDP_preregistration_OSF.md).
 ---
 
 ## Quick Start
