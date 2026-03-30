@@ -192,7 +192,7 @@ All derived files that contain LDP student names (personally identifiable inform
 | File | Contents |
 |---|---|
 | `DATA-DICTIONARY.md` | Column-level descriptions for all data files in `data/` |
-| [LDP_pre-registration](../LDP_pre-registration/LDP_preregistration_OSF.md) | Full study pre-registration including sampling, inclusion criteria, and analysis plan |
+| [LDP_pre-registration](https://github.com/pitherj/LDP_pre-registration/blob/main/LDP_preregistration_OSF.md) | Full study pre-registration including sampling, inclusion criteria, and analysis plan |
 | [LDP_thesis_classification](https://github.com/pitherj/LDP_thesis_classification) | Companion repo: EEE thesis classifier used to identify comparator candidates |
 
 ---
