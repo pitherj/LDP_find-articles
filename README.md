@@ -2,11 +2,7 @@
 
 Retrieves first-author publications for Living Data Project (LDP) student cohorts and matched comparator authors via the OpenAlex API, as part of a quasi-experimental study assessing FAIR data compliance among LDP graduates.
 
-**Authors**: Jason Pither, Mathew Vis-Dunbar, Sandra Emry, David Hunt, Diane Srivastava
-
 **AI usage**: Claude Code (Sonnet 4.6) contributed to coding and ensuring computational reproducibility, with oversight by Jason Pither.
-
-**Contact**: Jason Pither — jason.pither@ubc.ca | [ORCID](https://orcid.org/0000-0002-7490-6839) | UBC Okanagan
 
 ## Project Timeline
 
@@ -283,18 +279,55 @@ The `original` column in `rater_publications_final.csv` and `rater_publications_
 
 ---
 
+## Authors
+
+**Lead author and maintainer**
+
+Jason Pither — [0000-0002-7490-6839](https://orcid.org/0000-0002-7490-6839)  
+Department of Biology, University of British Columbia Okanagan  
+Email: jason [dot] pither <at> ubc [dot] ca
+
+**Co-investigators**
+
+| Name | ORCID |
+|---|---|
+| Mathew Vis-Dunbar | [0000-0001-6541-9660](https://orcid.org/0000-0001-6541-9660) |
+| Diane Srivastava | [0000-0003-4541-5595](https://orcid.org/0000-0003-4541-5595) |
+
+**Raters** (independent FAIR compliance scoring)
+
+| Name | ORCID | Rater ID in data |
+|---|---|---|
+| Jason Pither | [0000-0002-7490-6839](https://orcid.org/0000-0002-7490-6839) | JP |
+| David Hunt | [0000-0002-7771-8569](https://orcid.org/0000-0002-7771-8569) | DH |
+| Sandra Emry | [0000-0001-6882-2105](https://orcid.org/0000-0001-6882-2105) | SE |
+| Jessica Reemeyer | — | JR |
+
+---
+
+## Ethics
+
+This study received ethics approval from the UBC Behavioural Research Ethics Board (UBC BREB) on 2026-01-06.
+
+---
+
 ## How to Cite
 
 [TODO: add DOI once preprint and data archive are available]
+
+If referencing the pre-registration:
+
+> Jason Pither, Diane Srivastava, David AGA Hunt, Sandra Emry, Jessica Reemeyer, and Mathew Vis-Dunbar. (2026). *Assessing Open Science Practices Among Graduates of the Living Data Project, a Canada-wide Graduate Training Program*. OSF Pre-registration. https://osf.io/uyqt4/files/xjmyg
 
 ---
 
 ## License
 
-[TODO: specify license]
+Code in this repository is licensed under the [GNU General Public License v2](LICENSE).
 
 ---
 
 ## Acknowledgments
 
-This work is part of the Living Data Project, funded through NSERC CREATE. Ethics approval: UBC Behavioural Research Ethics Board (UBC BREB), 2026-01-06.
+- Funded through the Canadian Institute of Ecology and Evolution (CIEE) NSERC CREATE program
+- Some coding assisted by [Claude Code](https://claude.ai/code) (Anthropic)
