@@ -1,0 +1,204 @@
+---
+title: "PRISMA-Style Comparator Selection Flow Diagram"
+subtitle: "EEE thesis candidates from classification through OpenAlex retrieval to comparator publication pool — LDP quasi-experimental study"
+author: "Jason Pither"
+date: today
+format:
+  html:
+    self-contained: true
+    toc: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+## Purpose
+
+This document renders a PRISMA-style flow diagram tracing EEE-classified thesis
+candidates from the thesis classification project through eligibility filtering,
+LDP student exclusion, and OpenAlex publication retrieval to the final comparator
+publication pool used in the LDP FAIR compliance analysis.
+
+### Data sources for all counts
+
+| Count | Source |
+|---|---|
+| EEE theses (input) | `data/processed_data/classified/` CSVs from `LDP_thesis_classification` project |
+| Filtering to eligible candidates | Computed from classified CSVs: `Category == "EEE"`, `prob_EEE ≥ 0.75`, `year ∈ 2022–2024`, 4 LDP target institutions |
+| LDP student exclusion | `data/processed_data/private/ldp_exclusion_names.csv` (146 names; 28 overlapped with candidate pool) |
+| OpenAlex retrieval | `scripts/02_get_comparator_authors.R`; counts at intermediate search steps were printed to console only |
+| Final comparator pool | `data/processed_data/comparator_author_publications.csv` |
+
+### Step descriptions
+
+**EEE thesis classification.**
+Thesis metadata from 8 Canadian institutions was classified by the
+`LDP_thesis_classification` project pipeline. Of 16,900 clean theses, 1,682 were
+predicted as EEE (ecology, evolution, or environment) by the trained text classifier.
+
+**Eligibility filtering (`02_get_comparator_authors.R`).**
+EEE-classified theses are restricted to the 4 institutions with LDP graduates
+(McGill, UBC, Guelph, Manitoba), thesis submission years 2022–2024 (the years
+covered by the scraped thesis data), and classifier probability ≥ 0.75. Within-
+institution duplicate author entries are removed.
+
+**LDP student exclusion.**
+Candidates whose names appear on the LDP enrolment exclusion list
+(`ldp_exclusion_names.csv`, 146 names) are removed to ensure no LDP participant
+appears in the comparator pool.
+
+**OpenAlex retrieval (two-phase search).**
+For each of the 4 target institutions, a Phase 1 institution-level batch query
+retrieves EEE-field works published from 2021 onwards and extracts unique first
+authors. Candidate names are matched against the eligible pool using a first-initial +
+last-name key; ambiguous matches are resolved by highest topic-discipline score.
+Authors with more than 30 total OpenAlex works are excluded (likely non-students).
+Phase 2 fetches the complete first-author publication list for each confirmed match.
+Authors whose entire output matches non-EEE keyword patterns are not counted toward
+the target. Comparators are collected at 2× the institution target N to ensure
+sufficient coverage of publication years for downstream year-matched pairing.
+
+---
+
+```{r}
+#| label: prisma-diagram
+#| cache: false
+#| fig-cap: >
+#|   PRISMA-style flow of EEE thesis candidates from classification through
+#|   eligibility filtering and OpenAlex retrieval to the final comparator
+#|   publication pool. Blue boxes = main data flow; light yellow boxes =
+#|   processing / search steps; dark green box = final output;
+#|   red boxes = excluded records.
+
+library(DiagrammeR)
+
+dot_src <- '
+digraph prisma {
+
+  graph [rankdir  = TB,
+         splines  = ortho,
+         nodesep  = 0.55,
+         ranksep  = 0.60,
+         fontname = "Helvetica",
+         bgcolor  = "white"]
+
+  node [fontname = "Helvetica",
+        fontsize  = 9,
+        style     = "filled,rounded",
+        shape     = rectangle,
+        margin    = "0.18,0.12",
+        penwidth  = 1.2]
+
+  edge [arrowsize = 0.7,
+        penwidth  = 1.0]
+
+  //=================================================================
+  // INPUT
+  //=================================================================
+
+  input [label    = "EEE-CLASSIFIED THESES\nOutput of LDP_thesis_classification project\nn = 1,682",
+         fillcolor = "#D6EAF8", color = "#1A5276", width = 4.2,
+         fontname  = "Helvetica-Bold"]
+
+  //=================================================================
+  // ELIGIBILITY FILTERING
+  //=================================================================
+
+  filter_step [label = "Eligibility filtering  (02_get_comparator_authors.R)\nRestrict to 4 LDP target institutions\n(McGill, UBC, Guelph, Manitoba)\nThesis years 2022–2024  |  prob_EEE ≥ 0.75\nRemove within-institution duplicate authors",
+               fillcolor = "#FEF9E7", color = "#7D6608", width = 4.2,
+               style = "filled,rounded"]
+
+  eligible [label    = "ELIGIBLE CANDIDATES\n4 institutions\nn = 421 unique authors\n(McGill: 80  |  UBC: 188  |  Guelph: 93  |  Manitoba: 60)",
+            fillcolor = "#D6EAF8", color = "#1A5276", width = 4.2]
+
+  e_filter [label = "Excluded at eligibility filter\nn = 1,261\n(wrong institution, thesis year,\nor classifier confidence < 0.75)",
+            fillcolor = "#FADBD8", color = "#922B21", width = 3.0]
+
+  //=================================================================
+  // LDP STUDENT EXCLUSION
+  //=================================================================
+
+  ldp_excl_step [label = "LDP student exclusion\nRemove candidates on LDP enrolment\nexclusion list  (n = 146 names on list;\nn = 28 overlapped with candidate pool)",
+                 fillcolor = "#FEF9E7", color = "#7D6608", width = 4.2,
+                 style = "filled,rounded"]
+
+  candidates [label    = "ELIGIBLE NON-LDP CANDIDATES\n4 institutions\nn = 393 authors\n(McGill: 69  |  UBC: 171  |  Guelph: 93  |  Manitoba: 60)",
+              fillcolor = "#D6EAF8", color = "#1A5276", width = 4.2]
+
+  e_ldp [label = "Excluded: LDP students\nn = 28",
+         fillcolor = "#FADBD8", color = "#922B21", width = 3.0]
+
+  //=================================================================
+  // OPENALEX SEARCH
+  //=================================================================
+
+  search_step [label = "OpenAlex publication retrieval  (02_get_comparator_authors.R)\nPhase 1: institution-level batch query (EEE field, from 2021)\nPhase 2: per-author targeted works fetch\nExclude authors with > 30 total works\nExclude publications matching non-EEE keyword patterns\nOversample at 2× institution target N for year-matched pairing\nTarget N: McGill = 7  |  UBC = 13  |  Guelph = 1  |  Manitoba = 1",
+               fillcolor = "#FEF9E7", color = "#7D6608", width = 4.2,
+               style = "filled,rounded"]
+
+  //=================================================================
+  // FINAL OUTPUT
+  //=================================================================
+
+  final [label = "COMPARATOR PUBLICATION POOL\n109 authors  |  262 publications",
+         fillcolor = "#82E0AA", color = "#1D6A39", width = 4.2,
+         style = "filled,bold,rounded", fontsize = 11]
+
+  //=================================================================
+  // MAIN FLOW EDGES
+  //=================================================================
+
+  input        -> filter_step
+  filter_step  -> eligible
+  eligible     -> ldp_excl_step
+  ldp_excl_step -> candidates
+  candidates   -> search_step
+  search_step  -> final
+
+  //=================================================================
+  // EXCLUSION EDGES  (constraint = false: no rank effect)
+  //=================================================================
+
+  filter_step   -> e_filter [constraint = false, style = dashed, color = "#A93226"]
+  ldp_excl_step -> e_ldp    [constraint = false, style = dashed, color = "#A93226"]
+
+  //=================================================================
+  // RANK GROUPS
+  //=================================================================
+
+  { rank = same;  eligible;   e_filter }
+  { rank = same;  candidates; e_ldp    }
+
+  //=================================================================
+  // INVISIBLE ORDERING EDGES
+  //=================================================================
+
+  eligible   -> e_filter [style = invis]
+  candidates -> e_ldp    [style = invis]
+
+}
+'
+
+grViz(dot_src, height = 800, width = "100%")
+```
+
+---
+
+```{r}
+#| label: export-svg-pdf
+#| cache: false
+
+library(DiagrammeRsvg)
+library(rsvg)
+library(here)
+
+svg_str  <- DiagrammeRsvg::export_svg(grViz(dot_src))
+svg_path <- here::here("scripts", "comparator_selection_prisma.svg")
+pdf_path <- here::here("scripts", "comparator_selection_prisma.pdf")
+
+writeLines(svg_str, svg_path)
+rsvg::rsvg_pdf(svg = svg_path, file = pdf_path)
+
+message("Exported:\n  ", svg_path, "\n  ", pdf_path)
+```

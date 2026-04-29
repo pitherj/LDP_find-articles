@@ -144,6 +144,7 @@ Before running `02_get_comparator_authors.R`, populate `data/processed_data/clas
 LDP_find-articles/
 ├── README.md
 ├── scripts/
+│   ├── comparator_selection_prisma.qmd  # PRISMA-style comparator selection flow diagram
 │   ├── 01_get_ldp_targets.R           # Derives exclusion list, N_target, EEE field IDs
 │   ├── 02_get_comparator_authors.R    # Retrieves comparator author publications via OpenAlex
 │   ├── 03_clean_filter_publications.R # Deduplicates titles; filters to primary research
