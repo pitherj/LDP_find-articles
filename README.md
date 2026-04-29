@@ -12,8 +12,9 @@ Retrieves first-author publications for Living Data Project (LDP) student cohort
 | 2026-01-06 | Ethics approval (UBC BREB) |
 | 2026-01-13 | [Pre-registration](https://github.com/pitherj/LDP_pre-registration/blob/main/LDP_preregistration_OSF.md) initiated |
 | 2026-01-13 | README created |
-| 2026-03-30 | README last updated |
+| 2026-04-05 | [Pre-registration submitted](https://doi.org/10.17605/OSF.IO/UYQT4) |
 | 2026-04-13 | Post-hoc corrections: five ineligible publications identified; scripts 05–08 added (see Addendum) |
+| 2026-04-29 | README last updated |
 
 ---
 
