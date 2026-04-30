@@ -20,8 +20,7 @@ execute:
 
 This document provides a corrected power analysis for the LDP FAIR compliance study.
 The original power analysis in the pre-registration used
-`pwr::pwr.t.test(n = 21, ...)` from the `pwr` package, which was unavailable in the
-analysis environment at the time of rendering. The analysis below is implemented
+`pwr::pwr.t.test(n = 21, ...)` from the `pwr` package, and was not properly implemented. The analysis below is implemented
 entirely in base R using the non-central *t*-distribution, requires no additional
 packages, and is fully reproducible.
 
@@ -281,7 +280,25 @@ knitr::kable(sigma_D_table, align = rep("c", ncol(sigma_D_table))) |>
 
 ```{r}
 #| label: fig-power-grid
-#| fig-cap: "Statistical power of the one-sided paired t-test (α = 0.05, n = 19 pairs) as a function of Cohen's *d*. Horizontal dashed lines mark 80% and 90% power thresholds."
+#| fig-cap: !expr >
+#|   sprintf(
+#|     paste0(
+#|       "Statistical power of the one-sided paired t-test as a function of Cohen's d ",
+#|       "(n = 19 pairs, α = 0.05, one-sided). ",
+#|       "The power curve is parameterised by Cohen's d (= μ_D / σ_D) and therefore ",
+#|       "does not assume a specific value of σ_D (the SD of within-pair mean FAIR score ",
+#|       "differences, scale 0–4). ",
+#|       "Vertical dotted lines mark the minimum detectable Cohen's d: ",
+#|       "d* = %.3f at 80%% power and d* = %.3f at 90%% power. ",
+#|       "To convert d* to score units on the 0–4 scale, multiply by σ_D. ",
+#|       "Across the σ_D range explored in Sections B–C (0.50–1.50), these thresholds ",
+#|       "correspond to minimum detectable mean differences of %.2f–%.2f score points ",
+#|       "(80%% power) and %.2f–%.2f score points (90%% power)."
+#|     ),
+#|     d_80, d_90,
+#|     d_80 * 0.50, d_80 * 1.50,
+#|     d_90 * 0.50, d_90 * 1.50
+#|   )
 #| fig-height: 4.5
 #| fig-width: 6.5
 
@@ -301,6 +318,107 @@ legend("bottomright",
          sprintf("90%% power at d = %.3f", d_90)
        ),
        lty = 2, col = c("#E67E22", "#A93226"), bty = "n")
+```
+
+The figure above is parameterised in Cohen's *d* units. The figure below
+translates those thresholds into actual FAIR score units by expressing the
+minimum detectable mean difference as a function of σ~D~. Because
+MDE = *d*\* × σ~D~ with *d*\* fixed by *n*, α, and power, the relationship
+is linear: the slope equals *d*\* and the intercept is zero. Larger σ~D~
+(more variable within-pair differences) requires a larger absolute effect to
+achieve the same power.
+
+```{r}
+#| label: fig-mde-vs-sigma
+#| fig-cap: !expr >
+#|   sprintf(
+#|     paste0(
+#|       "Minimum detectable mean FAIR score difference (MDE = d* × σ_D) as a function of ",
+#|       "σ_D (SD of within-pair mean score differences), for 80%% power (solid, d* = %.3f) ",
+#|       "and 90%% power (dashed, d* = %.3f). ",
+#|       "The shaded band marks the σ_D range explored in Sections B–C (0.50–1.50). ",
+#|       "The vertical blue line shows the observed σ_D from the study (if available), ",
+#|       "with filled circles marking the corresponding MDE at each power level. ",
+#|       "n = 19 pairs, α = 0.05, one-sided."
+#|     ),
+#|     d_80, d_90
+#|   )
+#| fig-height: 4.5
+#| fig-width: 6.5
+
+# ── Observed σ_D from the study (optional; graceful fallback if file absent) ──
+sigma_D_obs <- tryCatch(
+  sd(readr::read_csv(
+    "../../LDP_analysis/data/data_processed/pairs_data.csv",
+    show_col_types = FALSE
+  )$D),
+  error = function(e) NULL
+)
+
+# ── Axis limits: extend x to include observed σ_D if it exceeds 2.0 ──────────
+x_max       <- if (!is.null(sigma_D_obs)) max(2.0, ceiling(sigma_D_obs * 5) / 5 + 0.1) else 2.0
+sigma_D_seq <- seq(0.10, x_max, length.out = 500)
+mde_80      <- d_80 * sigma_D_seq
+mde_90      <- d_90 * sigma_D_seq
+
+# ── Base plot (empty frame first so polygon is drawn under lines) ─────────────
+plot(sigma_D_seq, mde_80, type = "n",
+     xlab = expression(sigma[D]~"(SD of within-pair mean FAIR score differences)"),
+     ylab = "Min. detectable mean difference (FAIR score units, 0–4)",
+     ylim = c(0, d_90 * x_max * 1.05),
+     xlim = c(0.1, x_max),
+     las  = 1, bty = "l")
+
+# ── Shaded band for explored σ_D range ───────────────────────────────────────
+polygon(c(0.50, 1.50, 1.50, 0.50),
+        c(-1, -1, 99, 99),
+        col = adjustcolor("grey60", alpha.f = 0.15), border = NA)
+abline(v = c(0.50, 1.50), lty = 3, col = "grey55")
+
+# ── Grid and axes ─────────────────────────────────────────────────────────────
+grid(col = "grey88", lty = 1)
+abline(h = 0, col = "grey50")
+
+# ── MDE lines ─────────────────────────────────────────────────────────────────
+lines(sigma_D_seq, mde_80, lwd = 2.5, col = "#E67E22")
+lines(sigma_D_seq, mde_90, lwd = 2.5, col = "#A93226", lty = 2)
+
+# ── Observed σ_D annotation (conditional) ────────────────────────────────────
+leg_text <- c(
+  sprintf("80%% power  (d* = %.3f)", d_80),
+  sprintf("90%% power  (d* = %.3f)", d_90),
+  "σ_D range explored (0.50–1.50)"
+)
+leg_lty <- c(1, 2, NA)
+leg_lwd <- c(2.5, 2.5, NA)
+leg_col <- c("#E67E22", "#A93226", NA)
+leg_pch <- c(NA, NA, 22)   # filled square swatch for shaded band
+leg_pt_bg <- c(NA, NA, adjustcolor("grey60", 0.3))
+leg_pt_cex <- c(NA, NA, 2)
+
+if (!is.null(sigma_D_obs)) {
+  abline(v   = sigma_D_obs, lty = 1, col = "#1A6FA0", lwd = 1.8)
+  points(sigma_D_obs, d_80 * sigma_D_obs, pch = 19, col = "#E67E22", cex = 1.6)
+  points(sigma_D_obs, d_90 * sigma_D_obs, pch = 19, col = "#A93226", cex = 1.6)
+  leg_text <- c(leg_text,
+                sprintf("Observed σ_D = %.3f", sigma_D_obs))
+  leg_lty  <- c(leg_lty,  1)
+  leg_lwd  <- c(leg_lwd,  1.8)
+  leg_col  <- c(leg_col,  "#1A6FA0")
+  leg_pch  <- c(leg_pch,  NA)
+  leg_pt_bg  <- c(leg_pt_bg, NA)
+  leg_pt_cex <- c(leg_pt_cex, NA)
+}
+
+legend("topleft",
+       legend  = leg_text,
+       lty     = leg_lty,
+       lwd     = leg_lwd,
+       col     = leg_col,
+       pch     = leg_pch,
+       pt.bg   = leg_pt_bg,
+       pt.cex  = leg_pt_cex,
+       bty     = "n", cex = 0.88)
 ```
 
 ---

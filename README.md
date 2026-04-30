@@ -14,7 +14,7 @@ Retrieves first-author publications for Living Data Project (LDP) student cohort
 | 2026-01-13 | README created |
 | 2026-04-05 | [Pre-registration submitted](https://doi.org/10.17605/OSF.IO/UYQT4) |
 | 2026-04-13 | Post-hoc corrections: five ineligible publications identified; scripts 05–08 added (see Addendum) |
-| 2026-04-29 | README last updated |
+| 2026-04-30 | README last updated |
 
 ---
 
@@ -146,7 +146,11 @@ LDP_find-articles/
 ├── README.md
 ├── scripts/
 │   ├── comparator_selection_prisma.qmd  # PRISMA-style comparator selection flow diagram
+│   ├── comparator_selection_prisma.html # Rendered PRISMA diagram (self-contained)
+│   ├── comparator_selection_prisma.svg  # Vector (SVG) export of the PRISMA diagram
+│   ├── comparator_selection_prisma.pdf  # PDF export of the PRISMA diagram
 │   ├── updated_power_analysis.qmd       # Corrected power analysis (base R, n = 19 pairs)
+│   ├── updated_power_analysis.html      # Rendered power analysis report (self-contained)
 │   ├── 01_get_ldp_targets.R           # Derives exclusion list, N_target, EEE field IDs
 │   ├── 02_get_comparator_authors.R    # Retrieves comparator author publications via OpenAlex
 │   ├── 03_clean_filter_publications.R # Deduplicates titles; filters to primary research
@@ -157,7 +161,9 @@ LDP_find-articles/
 └── data/
     ├── raw_data/                        # Private LDP source data + non-sensitive lookup files
     │   ├── LDP-MODULES_ALL_2020-2022.csv  # [private] Full course roster
+    │   ├── LDP-MODULES_ALL_2020-2022.xlsx # [private] Excel source of course roster
     │   ├── Training_event_data.csv        # [private] Course year/title lookup
+    │   ├── Training_event_data.xlsx       # [private] Excel source of course year/title lookup
     │   ├── institution_names.csv          # Institution abbreviation → full name
     │   ├── ldp_n_target.csv               # Target comparator N per institution
     │   └── ldp_eee_field_ids.rds          # OpenAlex field IDs for EEE scope filter
@@ -195,6 +201,10 @@ All derived files that contain LDP student names (personally identifiable inform
 | `data/processed_data/comparator_publications_filtered.csv` | Comparator publications after deduplication and primary-research filtering |
 | `data/processed_data/rater_publications.csv` | Blinded publication list (pub_id, title, doi, year, openalex_url) — shared with raters |
 | `data/processed_data/private/rater_key.csv` | Links each blinded pub_id to its pair, group, author, and institution — not shared with raters |
+| `scripts/comparator_selection_prisma.html` | Self-contained rendered PRISMA-style comparator selection flow diagram |
+| `scripts/comparator_selection_prisma.svg` | Vector (SVG) export of the comparator PRISMA diagram |
+| `scripts/comparator_selection_prisma.pdf` | PDF export of the comparator PRISMA diagram |
+| `scripts/updated_power_analysis.html` | Self-contained rendered revised power analysis report (n = 19 pairs) |
 
 ---
 
@@ -282,19 +292,7 @@ The `original` column in `rater_publications_final.csv` and `rater_publications_
 
 ### Revised power analysis (n = 19 pairs)
 
-The pre-registration reported a power analysis based on n = 21 pairs. Following the post-hoc corrections described above, the final sample is n = 19 pairs. The revised power analysis is reported here for transparency.
-
-**Power analysis (one-sided paired t-test, α = 0.05, n = 19 pairs):**
-
-Power for the paired t-test depends on Cohen's *d* = μ~D~ / SD~D~, where μ~D~ is the expected mean paired difference in FAIR scores (0–4 scale) and SD~D~ is the standard deviation of those within-pair differences. The minimum detectable Cohen's *d* is fixed by *n* and α; the corresponding mean score difference is then d × SD~D~ and depends on the assumed SD~D~.
-
-At n = 19 and α = 0.05 (one-sided), the minimum detectable Cohen's *d* is:
-- **80% power:** d\* ≈ 0.593
-- **90% power:** d\* ≈ 0.698
-
-Assuming SD~D~ ≈ 1.0 (a conservative estimate for a 0–4 bounded score when pairs share institutional context), these correspond to minimum detectable mean score differences of ≈ 0.59 and ≈ 0.70 points respectively. If the within-pair differences are less variable (e.g., SD~D~ ≈ 0.85), these thresholds are proportionally smaller (≈ 0.50 and ≈ 0.59 points respectively). Power estimates were computed using base R: `pt(qt(0.95, df = 18), df = 18, ncp = d * sqrt(19), lower.tail = FALSE)`.
-
-Compared to the corrected n = 21 analysis (recalculated using the same base R approach: 80% power threshold ≈ 0.56 points, Cohen's d ≈ 0.56; 90% threshold ≈ 0.66 points, Cohen's d ≈ 0.66), the reduction to n = 19 pairs results in a modest increase in the minimum detectable effect size. The study remains adequately powered to detect moderate-to-large effects (Cohen's d ≥ 0.59) and underpowered for small effects (Cohen's d < 0.4). The permutation test (sign-flip on paired differences) has power approaching that of the paired t-test under normality, so these estimates are approximately applicable to the primary test as well.
+The pre-registration reported a power analysis based on n = 21 pairs. Following the post-hoc corrections described above, the final sample is n = 19 pairs. `scripts/updated_power_analysis.qmd` provides a revised power analysis for n = 19 to document the impact of this reduction on the study's detectable effect size.
 
 ---
 
