@@ -146,6 +146,7 @@ LDP_find-articles/
 ├── README.md
 ├── scripts/
 │   ├── comparator_selection_prisma.qmd  # PRISMA-style comparator selection flow diagram
+│   ├── updated_power_analysis.qmd       # Corrected power analysis (base R, n = 19 pairs)
 │   ├── 01_get_ldp_targets.R           # Derives exclusion list, N_target, EEE field IDs
 │   ├── 02_get_comparator_authors.R    # Retrieves comparator author publications via OpenAlex
 │   ├── 03_clean_filter_publications.R # Deduplicates titles; filters to primary research
@@ -278,6 +279,22 @@ The active rater files after all corrections are `rater_publications_final_v2.cs
 | `private/rater_key_final_v2.csv` | script 08 | **Active key file** |
 
 The `original` column in `rater_publications_final.csv` and `rater_publications_final_v2.csv` indicates whether a record was present in the original `rater_publications.csv` (`"yes"`) or is a correction-round replacement (`"no"`). This allows raters who began scoring from the original file to merge their assessments with the updated file.
+
+### Revised power analysis (n = 19 pairs)
+
+The pre-registration reported a power analysis based on n = 21 pairs. Following the post-hoc corrections described above, the final sample is n = 19 pairs. The revised power analysis is reported here for transparency.
+
+**Power analysis (one-sided paired t-test, α = 0.05, n = 19 pairs):**
+
+Power for the paired t-test depends on Cohen's *d* = μ~D~ / SD~D~, where μ~D~ is the expected mean paired difference in FAIR scores (0–4 scale) and SD~D~ is the standard deviation of those within-pair differences. The minimum detectable Cohen's *d* is fixed by *n* and α; the corresponding mean score difference is then d × SD~D~ and depends on the assumed SD~D~.
+
+At n = 19 and α = 0.05 (one-sided), the minimum detectable Cohen's *d* is:
+- **80% power:** d\* ≈ 0.593
+- **90% power:** d\* ≈ 0.698
+
+Assuming SD~D~ ≈ 1.0 (a conservative estimate for a 0–4 bounded score when pairs share institutional context), these correspond to minimum detectable mean score differences of ≈ 0.59 and ≈ 0.70 points respectively. If the within-pair differences are less variable (e.g., SD~D~ ≈ 0.85), these thresholds are proportionally smaller (≈ 0.50 and ≈ 0.59 points respectively). Power estimates were computed using base R: `pt(qt(0.95, df = 18), df = 18, ncp = d * sqrt(19), lower.tail = FALSE)`.
+
+Compared to the corrected n = 21 analysis (recalculated using the same base R approach: 80% power threshold ≈ 0.56 points, Cohen's d ≈ 0.56; 90% threshold ≈ 0.66 points, Cohen's d ≈ 0.66), the reduction to n = 19 pairs results in a modest increase in the minimum detectable effect size. The study remains adequately powered to detect moderate-to-large effects (Cohen's d ≥ 0.59) and underpowered for small effects (Cohen's d < 0.4). The permutation test (sign-flip on paired differences) has power approaching that of the paired t-test under normality, so these estimates are approximately applicable to the primary test as well.
 
 ---
 

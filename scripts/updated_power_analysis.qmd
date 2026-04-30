@@ -1,0 +1,368 @@
+---
+title: "Updated Power Analysis — LDP FAIR Compliance Study"
+subtitle: "One-sided paired t-test, n = 19 pairs, α = 0.05"
+author: "Jason Pither"
+date: today
+format:
+  html:
+    self-contained: true
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    code-summary: "Show code"
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+## Purpose
+
+This document provides a corrected power analysis for the LDP FAIR compliance study.
+The original power analysis in the pre-registration used
+`pwr::pwr.t.test(n = 21, ...)` from the `pwr` package, which was unavailable in the
+analysis environment at the time of rendering. The analysis below is implemented
+entirely in base R using the non-central *t*-distribution, requires no additional
+packages, and is fully reproducible.
+
+Two updates relative to the pre-registered analysis are incorporated:
+
+1. **Corrected sample size:** Following post-hoc corrections (documented in the
+   `LDP_find-articles` repository addendum), the final sample is n = **19** matched
+   pairs, not 21.
+2. **Broader parameterisation:** Power is evaluated across a range of plausible
+   within-pair difference standard deviations (σ~D~) and Cohen's *d* values, and the
+   relationship between σ~D~, individual rater score variability, and inter-rater
+   reliability (ICC) is made explicit.
+
+---
+
+## Background: the FAIR scoring rubric and the outcome variable
+
+Each publication is scored by **k = 4** independent raters using the standardised FAIR
+compliance checklist. The rubric assigns a maximum of 1 point to each of the four FAIR
+letters (Findable, Accessible, Interoperable, Reusable), giving a composite score in
+[0, 4]:
+
+| FAIR component | Possible values | Maximum |
+|---|---|---|
+| **Findable** | 0 (absent/broken), 0.5 (unstructured), 1 (structured + working pointer) | 1 |
+| **Accessible** | 0 or 1 (binary) | 1 |
+| **Interoperable** | 0 or 1 (binary) | 1 |
+| **Reusable** | 5 sub-items × 0.2 each (0 to 1 in steps of 0.2) | 1 |
+| **Total** | | **4** |
+
+The **primary outcome** for each publication is the arithmetic mean of the four raters'
+composite scores — a quasi-continuous value in [0, 4]. The paired difference for pair
+*i* is:
+
+$$D_i = \bar{X}^{\text{LDP}}_i - \bar{X}^{\text{Comp}}_i$$
+
+where $\bar{X}_i = \tfrac{1}{4}\sum_{j=1}^{4} X_{ij}$ is the mean of the four raters'
+scores for publication *i*.
+
+---
+
+## Statistical framework
+
+### Hypotheses
+
+$$H_0: \mu_D = 0 \qquad H_a: \mu_D > 0$$
+
+The test statistic is $t = \bar{D} \,/\, (s_D / \sqrt{n})$, compared to a one-sided
+critical value from the $t_{n-1}$ distribution at $\alpha = 0.05$.
+
+### Cohen's *d* for the paired design
+
+Cohen's *d* for the paired t-test (sometimes denoted *d*~z~) is:
+
+$$d = \frac{\mu_D}{\sigma_D}$$
+
+where:
+
+- $\mu_D$ = the expected within-pair difference in mean FAIR scores (LDP minus
+  comparator)
+- $\sigma_D$ = the standard deviation of those within-pair differences
+
+Given Cohen's *d* and a sample size *n*, the minimum detectable mean difference
+(in score units on the 0–4 scale) is:
+
+$$\mu_D^{\min} = d \times \sigma_D$$
+
+### Power calculation
+
+Power for the one-sided paired t-test is:
+
+$$\text{Power} = P\!\left(T > t_{1-\alpha,\, n-1} \;\Big|\; T \sim t_{n-1,\, \lambda}\right)$$
+
+where $\lambda = d\sqrt{n}$ is the non-centrality parameter and $t_{1-\alpha,\, n-1}$
+is the $(1-\alpha)$ quantile of the central *t* distribution with $n-1$ degrees of
+freedom. This is computed in base R as:
+
+```r
+power_paired <- function(n, d, alpha = 0.05) {
+  t_crit <- qt(1 - alpha, df = n - 1)
+  ncp    <- d * sqrt(n)
+  pt(t_crit, df = n - 1, ncp = ncp, lower.tail = FALSE)
+}
+```
+
+```{r}
+#| label: power-functions
+
+# Power for one-sided paired t-test using non-central t distribution
+power_paired <- function(n, d, alpha = 0.05) {
+  t_crit <- qt(1 - alpha, df = n - 1)
+  ncp    <- d * sqrt(n)
+  pt(t_crit, df = n - 1, ncp = ncp, lower.tail = FALSE)
+}
+
+# Minimum detectable Cohen's d for a given power (bisection search)
+find_d <- function(n, target_power, alpha = 0.05, lo = 0, hi = 5, tol = 1e-8) {
+  for (i in seq_len(200)) {
+    mid <- (lo + hi) / 2
+    p   <- power_paired(n, mid, alpha)
+    if (abs(p - target_power) < tol) break
+    if (p < target_power) lo <- mid else hi <- mid
+  }
+  mid
+}
+```
+
+---
+
+## Section A — Power across a range of Cohen's *d* values
+
+```{r}
+#| label: power-table
+
+n    <- 19
+d_vals <- c(0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 1.0, 1.2)
+
+pow_vec <- sapply(d_vals, power_paired, n = n)
+
+power_df <- data.frame(
+  `Cohen's d`   = d_vals,
+  `Power (n=19)` = round(pow_vec, 3),
+  check.names = FALSE
+)
+```
+
+```{r}
+#| label: tbl-power-by-d
+#| tbl-cap: "Statistical power of the one-sided paired t-test (α = 0.05, n = 19 pairs) for a range of Cohen's *d* values. Power values ≥ 0.80 are highlighted."
+
+knitr::kable(power_df, align = c("c", "c")) |>
+  kableExtra::kable_styling(full_width = FALSE) |>
+  kableExtra::row_spec(which(power_df[["Power (n=19)"]] >= 0.80), bold = TRUE,
+                       background = "#D5F5E3")
+```
+
+---
+
+## Section B — Minimum detectable effect size across σ~D~ values
+
+The minimum detectable mean FAIR score difference (on the 0–4 scale) depends on both
+Cohen's *d* and the within-pair difference standard deviation σ~D~:
+
+$$\mu_D^{\min} = d^* \times \sigma_D$$
+
+The table below reports $d^*$ (minimum Cohen's *d* for 80% and 90% power) and the
+corresponding minimum detectable mean score difference for five plausible values of
+σ~D~.
+
+```{r}
+#| label: tbl-mde
+#| tbl-cap: "Minimum detectable Cohen's *d* and mean FAIR score difference (0–4 scale) at 80% and 90% power (one-sided paired t-test, α = 0.05, n = 19 pairs), across a range of within-pair difference standard deviations σ~D~."
+
+sigma_D_vals <- c(0.50, 0.75, 1.00, 1.25, 1.50)
+
+d_80 <- find_d(n = 19, target_power = 0.80)
+d_90 <- find_d(n = 19, target_power = 0.90)
+
+mde_df <- data.frame(
+  `σ_D`                    = sigma_D_vals,
+  `Min. detectable diff. (80% power)` = round(d_80 * sigma_D_vals, 3),
+  `Min. detectable diff. (90% power)` = round(d_90 * sigma_D_vals, 3),
+  check.names = FALSE
+)
+
+# Prepend the d* row header info as a note
+attr(mde_df, "note") <- sprintf(
+  "Minimum detectable Cohen's d: 80%% power → d* = %.3f; 90%% power → d* = %.3f",
+  d_80, d_90
+)
+
+knitr::kable(mde_df, align = c("c", "c", "c")) |>
+  kableExtra::kable_styling(full_width = FALSE) |>
+  kableExtra::footnote(
+    general = sprintf(
+      "Minimum detectable Cohen's d (n = 19, α = 0.05, one-sided): 80%% power → d* = %.3f; 90%% power → d* = %.3f.",
+      d_80, d_90
+    ),
+    general_title = ""
+  )
+```
+
+---
+
+## Section C — How σ~D~ relates to individual rater score variability and ICC
+
+The within-pair difference standard deviation σ~D~ can be expressed in terms of
+observable quantities:
+
+$$\sigma_D = \sigma \cdot \sqrt{2} \cdot \sqrt{\text{ICC} + \frac{1 - \text{ICC}}{k}}$$
+
+where:
+
+- $\sigma$ = standard deviation of a **single rater's** composite FAIR score across
+  all publications (scale: 0–4)
+- ICC = intraclass correlation coefficient (two-way mixed, absolute agreement, average
+  measures, *k* = 4 raters) — the proportion of total score variance attributable to
+  between-publication differences
+- $k$ = number of raters (here, *k* = 4)
+
+**Derivation.** Under the standard one-way ICC variance-components model,
+$X_{ij} = \mu_i + \varepsilon_{ij}$, where $\mu_i \sim \mathcal{N}(\mu,\,
+\sigma^2_{\text{between}})$ and $\varepsilon_{ij} \sim \mathcal{N}(0,\,
+\sigma^2_{\text{within}})$:
+
+$$\text{Var}(\bar{X}_i) = \sigma^2_{\text{between}} + \frac{\sigma^2_{\text{within}}}{k}
+  = \sigma^2 \left[\text{ICC} + \frac{1-\text{ICC}}{k}\right]$$
+
+where $\sigma^2 = \sigma^2_{\text{between}} + \sigma^2_{\text{within}}$ is the total
+variance of a single rating. Assuming LDP and comparator scores within a pair are
+independent:
+
+$$\sigma^2_D = 2\,\text{Var}(\bar{X}_i) = 2\,\sigma^2\left[\text{ICC} +
+\frac{1-\text{ICC}}{k}\right]$$
+
+As ICC → 1 (all variance between publications, raters agree perfectly),
+$\sigma_D \to \sigma\sqrt{2}$.
+As ICC → 0 (all variance is rater noise, averaging over raters is maximally
+beneficial), $\sigma_D \to \sigma\sqrt{2/k} = \sigma/\sqrt{2}$ for $k = 4$.
+
+```{r}
+#| label: tbl-sigma-D
+#| tbl-cap: "Implied σ~D~ (SD of within-pair differences in mean FAIR scores) for combinations of single-rater score SD (σ) and ICC, with k = 4 raters. Values in parentheses indicate the minimum detectable mean FAIR score difference at 80% power (n = 19)."
+
+sigma_vals <- c(0.6, 0.8, 1.0, 1.2)
+icc_vals   <- c(0.40, 0.50, 0.60, 0.70, 0.80)
+k          <- 4
+
+rows <- lapply(sigma_vals, function(s) {
+  vals <- sapply(icc_vals, function(icc) {
+    sd_D <- s * sqrt(2) * sqrt(icc + (1 - icc) / k)
+    mde  <- d_80 * sd_D
+    sprintf("%.2f (%.2f)", sd_D, mde)
+  })
+  c(sigma = as.character(s), vals)
+})
+
+sigma_D_table <- as.data.frame(do.call(rbind, rows), stringsAsFactors = FALSE)
+colnames(sigma_D_table) <- c("σ (single rater)",
+                              paste0("ICC = ", icc_vals))
+
+knitr::kable(sigma_D_table, align = rep("c", ncol(sigma_D_table))) |>
+  kableExtra::kable_styling(full_width = FALSE) |>
+  kableExtra::footnote(
+    general = paste0(
+      "Each cell shows σ_D (SD of within-pair differences in mean scores) with the minimum ",
+      "detectable mean FAIR score difference at 80% power in parentheses. ",
+      sprintf("d* = %.3f for 80%% power (n = 19, α = 0.05, one-sided).", d_80)
+    ),
+    general_title = ""
+  )
+```
+
+---
+
+## Section D — Power across the full σ~D~ × *d* grid
+
+```{r}
+#| label: fig-power-grid
+#| fig-cap: "Statistical power of the one-sided paired t-test (α = 0.05, n = 19 pairs) as a function of Cohen's *d*. Horizontal dashed lines mark 80% and 90% power thresholds."
+#| fig-height: 4.5
+#| fig-width: 6.5
+
+d_seq  <- seq(0.1, 1.4, by = 0.01)
+pow_seq <- sapply(d_seq, power_paired, n = 19)
+
+plot(d_seq, pow_seq, type = "l", lwd = 2, col = "#1A5276",
+     xlab = "Cohen's d", ylab = "Power",
+     main = "Power curve: one-sided paired t-test\n(α = 0.05, n = 19 pairs)",
+     ylim = c(0, 1), las = 1)
+abline(h = c(0.80, 0.90), lty = 2, col = c("#E67E22", "#A93226"))
+abline(v = c(d_80, d_90), lty = 3, col = c("#E67E22", "#A93226"))
+grid(col = "grey85", lty = 1)
+legend("bottomright",
+       legend = c(
+         sprintf("80%% power at d = %.3f", d_80),
+         sprintf("90%% power at d = %.3f", d_90)
+       ),
+       lty = 2, col = c("#E67E22", "#A93226"), bty = "n")
+```
+
+---
+
+## Section E — Comparison with the pre-registered analysis (n = 21)
+
+```{r}
+#| label: tbl-comparison
+#| tbl-cap: "Comparison of minimum detectable mean FAIR score differences between the pre-registered analysis (n = 21) and the corrected analysis (n = 19), at 80% and 90% power, for two assumed values of σ~D~."
+
+d_80_n21 <- find_d(n = 21, target_power = 0.80)
+d_90_n21 <- find_d(n = 21, target_power = 0.90)
+d_80_n19 <- find_d(n = 19, target_power = 0.80)
+d_90_n19 <- find_d(n = 19, target_power = 0.90)
+
+sigma_compare <- c(0.85, 1.00)
+
+comp_rows <- lapply(sigma_compare, function(s) {
+  c(
+    `σ_D` = as.character(s),
+    `n=21, 80% power` = sprintf("%.3f (d* = %.3f)", d_80_n21 * s, d_80_n21),
+    `n=21, 90% power` = sprintf("%.3f (d* = %.3f)", d_90_n21 * s, d_90_n21),
+    `n=19, 80% power` = sprintf("%.3f (d* = %.3f)", d_80_n19 * s, d_80_n19),
+    `n=19, 90% power` = sprintf("%.3f (d* = %.3f)", d_90_n19 * s, d_90_n19)
+  )
+})
+
+comp_df <- as.data.frame(do.call(rbind, comp_rows), stringsAsFactors = FALSE)
+
+knitr::kable(comp_df, align = rep("c", ncol(comp_df))) |>
+  kableExtra::kable_styling(full_width = FALSE) |>
+  kableExtra::footnote(
+    general = "Each cell shows the minimum detectable mean FAIR score difference (0–4 scale) with the corresponding Cohen's d* in parentheses.",
+    general_title = ""
+  )
+```
+
+The reduction from n = 21 to n = 19 pairs results in a modest increase in the
+minimum detectable effect size. With σ~D~ = 1.0:
+
+- **80% power threshold** increases from
+  `r sprintf("%.2f", d_80_n21 * 1.0)` (n = 21) to
+  `r sprintf("%.2f", d_80_n19 * 1.0)` (n = 19) score points
+  (Cohen's d: `r sprintf("%.3f", d_80_n21)` → `r sprintf("%.3f", d_80_n19)`)
+- **90% power threshold** increases from
+  `r sprintf("%.2f", d_90_n21 * 1.0)` (n = 21) to
+  `r sprintf("%.2f", d_90_n19 * 1.0)` (n = 19) score points
+  (Cohen's d: `r sprintf("%.3f", d_90_n21)` → `r sprintf("%.3f", d_90_n19)`)
+
+The study remains adequately powered to detect moderate-to-large effects
+(Cohen's d ≥ `r sprintf("%.2f", d_80_n19)`) and underpowered for small effects
+(Cohen's d < 0.4). The permutation test (sign-flip on paired differences) has power
+approaching that of the paired t-test under normality, so these estimates are
+approximately applicable to both primary and backup tests.
+
+---
+
+## Session information
+
+```{r}
+#| label: session-info
+#| code-fold: false
+
+sessionInfo()
+```
